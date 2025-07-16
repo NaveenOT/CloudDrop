@@ -1,16 +1,32 @@
-# frontend
+# ☁️ CloudDrop — Seamless Local File Sharing via Flutter & Go
 
-A new Flutter project.
+**CloudDrop** is an in-progress cross-platform file sharing application that bridges local and mobile environments using a QR-code-enabled tunnel system. Built with **Flutter** for the frontend (mobile + desktop) and **Go** for the backend, it enables secure, self-hosted, QR-scannable file access from your devices.
 
-## Getting Started
+---
+### 🚧 In Progres
+---
+## 🔧 Current Functionality
 
-This project is a starting point for a Flutter application.
+- 📱 **Flutter Mobile App**: Access files over the local network or internet via a secure tunnel.
+- 🖥️ **Flutter Desktop App**: Initiates the backend Go server and sets up a Cloudflare tunnel to expose your file directory.
+- 🌐 **Go Server**:
+  - Serves files via HTTP.
+  - Reads upload/download metadata.
+  - Interfaces with tunnel and exposes API.
+- 📸 **QR Code Generation**: For easy pairing between devices.
+- 🔒 Local-first, no third-party storage — your files stay on your system.
 
-A few resources to get you started if this is your first Flutter project:
+---
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## 📦 Architecture
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```text
+[Flutter Desktop] ── starts ──▶ [Go Backend Server]
+        │                             │
+        │                             ├── Serves files from selected directory
+        │                             ├── Starts Cloudflare tunnel
+        │                             └── Displays public URL as QR code
+        ▼
+[Flutter Mobile] ◀── scans ── QR code with tunnel URL
+        │
+        └── Access/download/upload files over tunnel via Go API
