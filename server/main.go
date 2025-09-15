@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	_ "github.com/mattn/go-sqlite3"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -48,6 +49,13 @@ func main() {
 	})
 	r.POST("/register", register)
 	r.POST("/login", login)
+	auth := r.Group("/")
+	auth.Use(authMiddleware())
+	{
+		auth.GET("/files", allfiles)
+		auth.GET("upload", uploadfile)
+		auth.GET("/download/:filename", downloadfile)
+	}
 	r.GET("/files", allfiles)
 	r.POST("/upload", uploadfile)
 	r.GET("/download/:filename", downloadfile)
@@ -144,9 +152,47 @@ func login(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid Password"})
 		return
 	}
-	token := jwt.
-		c.JSON(http.StatusOK, gin.H{"message": "Login successful"})
-
+	//Creating a JWT only requires username
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"username": storedUser.Username,
+		//"exp": time.Now().Add(time.Hour * 1).Unix(),
+	})
+	tokenString, err := token.SignedString(secretKey)
+	c.JSON(http.StatusOK, gin.H{"message": "Login successful", "token": tokenString})
+}
+func authMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tokenString := c.GetHeader("Authorization")
+		if tokenString == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Token unauthorized",
+			})
+			c.Abort()
+			return
+		}
+		//Common thing in JWT
+		if len(tokenString) > 7 && tokenString[:7] == "Bearer " {
+			tokenString = tokenString[7:]
+		}
+		//verify the secret key
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			_, ok := token.Method.(*jwt.SigningMethodHMAC)
+			if !ok {
+				return nil, fmt.Errorf("unexpected signing method")
+			}
+			return secretKey, nil
+		})
+		if err != nil || !token.Valid {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Token Unauthorized or session expired",
+			})
+		}
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if ok {
+			c.Set("username", claims["username"])
+		}
+		c.Next()
+	}
 }
 func uploadfile(c *gin.Context) {
 	file, err := c.FormFile("file")
