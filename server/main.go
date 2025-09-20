@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -13,15 +12,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	_ "github.com/mattn/go-sqlite3"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"golang.org/x/crypto/bcrypt"
 )
 
 var db *sql.DB
 var savePath string
-var userCollection *mongo.Collection
+
+// var userCollection *mongo.Collection
 var loggedIn bool
 
 type User struct {
@@ -40,15 +36,15 @@ var secretKey = []byte("secretKey")
 func main() {
 	fmt.Println("Hello World")
 	savePath = os.Args[1]
-	initMongoDB()
+	//initMongoDB()
 	initDB()
 	r := gin.Default()
 	r.LoadHTMLGlob("templates/*")
 	r.GET("/", func(ctx *gin.Context) {
 		ctx.HTML(http.StatusOK, "index.html", nil)
 	})
-	r.POST("/register", register)
-	r.POST("/login", login)
+	//r.POST("/register", register)
+	//r.POST("/login", login)
 	auth := r.Group("/")
 	auth.Use(authMiddleware())
 	{
@@ -56,26 +52,8 @@ func main() {
 		auth.GET("upload", uploadfile)
 		auth.GET("/download/:filename", downloadfile)
 	}
-	r.GET("/files", allfiles)
-	r.POST("/upload", uploadfile)
-	r.GET("/download/:filename", downloadfile)
 
 	r.Run(":8080")
-}
-func initMongoDB() {
-	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017"))
-	if err != nil {
-		log.Fatal("Mongodb Connection Error")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	err = client.Connect(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-	userCollection = client.Database("clouddrop").Collection("users")
-	fmt.Println("Connection Established")
-
 }
 func initDB() {
 	var err error
@@ -95,71 +73,91 @@ func initDB() {
 	}
 
 }
-func register(c *gin.Context) {
-	var user User
-	err := c.ShouldBindJSON(&user)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid Request",
-		})
-		return
-	}
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Error in Hashing Password",
-		})
-		return
-	}
-	user.Password = string(hashedPassword)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	exists, _ := userCollection.CountDocuments(ctx, bson.M{"username": user.Username})
-	if exists > 0 {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Username already exists",
-		})
-		return
-	}
-	_, err = userCollection.InsertOne(ctx, user)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating user"})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Successfully Registered User",
-	})
+
+/*
+	func initMongoDB() {
+		client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017"))
+		if err != nil {
+			log.Fatal("Mongodb Connection Error")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		err = client.Connect(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+		userCollection = client.Database("clouddrop").Collection("users")
+		fmt.Println("Connection Established")
+
 }
-func login(c *gin.Context) {
-	var user User
-	err := c.ShouldBindJSON(&user)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid Request",
+
+	func register(c *gin.Context) {
+		var user User
+		err := c.ShouldBindJSON(&user)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Invalid Request",
+			})
+			return
+		}
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Error in Hashing Password",
+			})
+			return
+		}
+		user.Password = string(hashedPassword)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		exists, _ := userCollection.CountDocuments(ctx, bson.M{"username": user.Username})
+		if exists > 0 {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Username already exists",
+			})
+			return
+		}
+		_, err = userCollection.InsertOne(ctx, user)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating user"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Successfully Registered User",
 		})
-		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	var storedUser User
-	err = userCollection.FindOne(ctx, bson.M{"username": user.Username}).Decode(&storedUser)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username"})
-		return
+
+	func login(c *gin.Context) {
+		var user User
+		err := c.ShouldBindJSON(&user)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Invalid Request",
+			})
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		var storedUser User
+		err = userCollection.FindOne(ctx, bson.M{"username": user.Username}).Decode(&storedUser)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username"})
+			return
+		}
+		err = bcrypt.CompareHashAndPassword([]byte(storedUser.Password), []byte(user.Password))
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid Password"})
+			return
+		}
+		//Creating a JWT only requires username
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"username": storedUser.Username,
+			//"exp": time.Now().Add(time.Hour * 1).Unix(),
+		})
+		tokenString, err := token.SignedString(secretKey)
+		c.JSON(http.StatusOK, gin.H{"message": "Login successful", "token": tokenString})
 	}
-	err = bcrypt.CompareHashAndPassword([]byte(storedUser.Password), []byte(user.Password))
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid Password"})
-		return
-	}
-	//Creating a JWT only requires username
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"username": storedUser.Username,
-		//"exp": time.Now().Add(time.Hour * 1).Unix(),
-	})
-	tokenString, err := token.SignedString(secretKey)
-	c.JSON(http.StatusOK, gin.H{"message": "Login successful", "token": tokenString})
-}
+*/
 func authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString := c.GetHeader("Authorization")
